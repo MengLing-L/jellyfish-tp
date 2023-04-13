@@ -29,6 +29,40 @@ where
     }
 }
 
+/// A Jellyfish gate
+#[derive(Debug, Clone)]
+pub struct TurboGate<F: Field> {
+    pub(crate) q_lc: [F; GATE_WIDTH],
+    pub(crate) q_mul: [F; N_MUL_SELECTORS],
+    pub(crate) q_hash: [F; GATE_WIDTH],
+    // pub(crate) q_ecc: F,
+    pub(crate) q_o: F,
+}
+
+impl<F> Gate<F> for TurboGate<F>
+where
+    F: Field,
+{
+    fn name(&self) -> &'static str {
+        "Turbo Gate"
+    }
+    fn q_lc(&self) -> [F; GATE_WIDTH] {
+        self.q_lc
+    }
+    fn q_mul(&self) -> [F; N_MUL_SELECTORS] {
+        self.q_mul
+    }
+    fn q_hash(&self) -> [F; GATE_WIDTH] {
+        self.q_hash
+    }
+    // fn q_ecc(&self) -> F {
+    //     self.q_ecc
+    // }
+    fn q_o(&self) -> F {
+        self.q_o
+    }
+}
+
 /// An addition gate
 #[derive(Debug, Clone)]
 pub struct AdditionGate;

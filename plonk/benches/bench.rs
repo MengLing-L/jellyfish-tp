@@ -19,11 +19,11 @@ use jf_plonk::{
     transcript::StandardTranscript,
     PlonkType,
 };
-use jf_relation::{Circuit, PlonkCircuit};
+use jf_relation::{Circuit, PlonkCircuit, Arithmetization};
 use std::time::Instant;
 
-const NUM_REPETITIONS: usize = 10;
-const NUM_GATES_LARGE: usize = 32768;
+const NUM_REPETITIONS: usize = 1;
+const NUM_GATES_LARGE: usize = 524288;
 const NUM_GATES_SMALL: usize = 8192;
 
 fn gen_circuit_for_bench<F: PrimeField>(
@@ -35,12 +35,27 @@ fn gen_circuit_for_bench<F: PrimeField>(
         PlonkType::TurboPlonk => PlonkCircuit::new_turbo_plonk(),
         PlonkType::UltraPlonk => PlonkCircuit::new_ultra_plonk(range_bit_len),
     };
-    let mut a = cs.zero();
-    for _ in 0..num_gates - 10 {
-        a = cs.add(a, cs.one())?;
+    let a = cs.create_variable(F::from(3u32))?;
+    let b = cs.create_variable(F::from(3u32))?;
+    let c = cs.create_variable(F::from(3u32))?;
+    let d= cs.create_variable(F::from(3u32))?;
+    let wire = [a, b, c, d];
+    let q_lc = [F::one(), F::one(), F::one(), F::one()];
+    let q_mul = [F::one(), F::one()];
+    let q_hash = [F::one(), F::one(), F::one(), F::one()];
+    let q_eqq = F::one();
+    for _ in 0..num_gates {
+        cs.turbo(&wire, &q_lc, &q_mul, &q_hash, q_eqq)?;
     }
+    // let mut a = cs.zero();
+    // for _ in 0..num_gates - 10 {
+    //     a = cs.add(a, cs.one())?;
+    // }
     // Finalize the circuit.
+    // assert!(cs.check_circuit_satisfiability(&[]).is_ok());
     cs.finalize_for_arithmetization()?;
+
+    // println!("{:?}",cs.srs_size());
 
     Ok(cs)
 }
@@ -50,7 +65,7 @@ macro_rules! plonk_prove_bench {
         let rng = &mut jf_utils::test_rng();
         let cs = gen_circuit_for_bench::<$bench_field>($num_gates, $bench_plonk_type).unwrap();
 
-        let max_degree = $num_gates + 2;
+        let max_degree = cs.srs_size().unwrap();
         let srs = PlonkKzgSnark::<$bench_curve>::universal_setup(max_degree, rng).unwrap();
 
         let (pk, _) = PlonkKzgSnark::<$bench_curve>::preprocess(&srs, &cs).unwrap();
@@ -65,23 +80,24 @@ macro_rules! plonk_prove_bench {
         }
 
         println!(
-            "proving time for {}, {}: {} ns/gate",
+            "proving time for {}, {}: {} s",
             stringify!($bench_curve),
             stringify!($bench_plonk_type),
-            start.elapsed().as_nanos() / NUM_REPETITIONS as u128 / $num_gates as u128
+            // start.elapsed().as_nanos() / NUM_REPETITIONS as u128 / $num_gates  as u128
+            start.elapsed().as_secs() / NUM_REPETITIONS  as u64
         );
     };
 }
 
 fn bench_prove() {
     plonk_prove_bench!(Bls12_381, Fr381, PlonkType::TurboPlonk, NUM_GATES_LARGE);
-    plonk_prove_bench!(Bls12_377, Fr377, PlonkType::TurboPlonk, NUM_GATES_LARGE);
-    plonk_prove_bench!(Bn254, Fr254, PlonkType::TurboPlonk, NUM_GATES_LARGE);
-    plonk_prove_bench!(BW6_761, Fr761, PlonkType::TurboPlonk, NUM_GATES_SMALL);
-    plonk_prove_bench!(Bls12_381, Fr381, PlonkType::UltraPlonk, NUM_GATES_LARGE);
-    plonk_prove_bench!(Bls12_377, Fr377, PlonkType::UltraPlonk, NUM_GATES_LARGE);
-    plonk_prove_bench!(Bn254, Fr254, PlonkType::UltraPlonk, NUM_GATES_LARGE);
-    plonk_prove_bench!(BW6_761, Fr761, PlonkType::UltraPlonk, NUM_GATES_SMALL);
+    // plonk_prove_bench!(Bls12_377, Fr377, PlonkType::TurboPlonk, NUM_GATES_LARGE);
+    // plonk_prove_bench!(Bn254, Fr254, PlonkType::TurboPlonk, NUM_GATES_LARGE);
+    // plonk_prove_bench!(BW6_761, Fr761, PlonkType::TurboPlonk, NUM_GATES_SMALL);
+    // plonk_prove_bench!(Bls12_381, Fr381, Plo nkType::UltraPlonk, NUM_GATES_LARGE);
+    // plonk_prove_bench!(Bls12_377, Fr377, PlonkType::UltraPlonk, NUM_GATES_LARGE);
+    // plonk_prove_bench!(Bn254, Fr254, PlonkType::UltraPlonk, NUM_GATES_LARGE);
+    // plonk_prove_bench!(BW6_761, Fr761, PlonkType::UltraPlonk, NUM_GATES_SMALL);
 }
 
 macro_rules! plonk_verify_bench {
@@ -117,13 +133,13 @@ macro_rules! plonk_verify_bench {
 
 fn bench_verify() {
     plonk_verify_bench!(Bls12_381, Fr381, PlonkType::TurboPlonk, NUM_GATES_LARGE);
-    plonk_verify_bench!(Bls12_377, Fr377, PlonkType::TurboPlonk, NUM_GATES_LARGE);
-    plonk_verify_bench!(Bn254, Fr254, PlonkType::TurboPlonk, NUM_GATES_LARGE);
-    plonk_verify_bench!(BW6_761, Fr761, PlonkType::TurboPlonk, NUM_GATES_SMALL);
-    plonk_verify_bench!(Bls12_381, Fr381, PlonkType::UltraPlonk, NUM_GATES_LARGE);
-    plonk_verify_bench!(Bls12_377, Fr377, PlonkType::UltraPlonk, NUM_GATES_LARGE);
-    plonk_verify_bench!(Bn254, Fr254, PlonkType::UltraPlonk, NUM_GATES_LARGE);
-    plonk_verify_bench!(BW6_761, Fr761, PlonkType::UltraPlonk, NUM_GATES_SMALL);
+    // plonk_verify_bench!(Bls12_377, Fr377, PlonkType::TurboPlonk, NUM_GATES_LARGE);
+    // plonk_verify_bench!(Bn254, Fr254, PlonkType::TurboPlonk, NUM_GATES_LARGE);
+    // plonk_verify_bench!(BW6_761, Fr761, PlonkType::TurboPlonk, NUM_GATES_SMALL);
+    // plonk_verify_bench!(Bls12_381, Fr381, PlonkType::UltraPlonk, NUM_GATES_LARGE);
+    // plonk_verify_bench!(Bls12_377, Fr377, PlonkType::UltraPlonk, NUM_GATES_LARGE);
+    // plonk_verify_bench!(Bn254, Fr254, PlonkType::UltraPlonk, NUM_GATES_LARGE);
+    // plonk_verify_bench!(BW6_761, Fr761, PlonkType::UltraPlonk, NUM_GATES_SMALL);
 }
 
 macro_rules! plonk_batch_verify_bench {
@@ -131,7 +147,7 @@ macro_rules! plonk_batch_verify_bench {
         let rng = &mut jf_utils::test_rng();
         let cs = gen_circuit_for_bench::<$bench_field>(1024, $bench_plonk_type).unwrap();
 
-        let max_degree = 1026;
+        let max_degree = 2046;
         let srs = PlonkKzgSnark::<$bench_curve>::universal_setup(max_degree, rng).unwrap();
 
         let (pk, vk) = PlonkKzgSnark::<$bench_curve>::preprocess(&srs, &cs).unwrap();
@@ -169,17 +185,17 @@ macro_rules! plonk_batch_verify_bench {
 
 fn bench_batch_verify() {
     plonk_batch_verify_bench!(Bls12_381, Fr381, PlonkType::TurboPlonk, 1000);
-    plonk_batch_verify_bench!(Bls12_377, Fr377, PlonkType::TurboPlonk, 1000);
-    plonk_batch_verify_bench!(Bn254, Fr254, PlonkType::TurboPlonk, 1000);
-    plonk_batch_verify_bench!(BW6_761, Fr761, PlonkType::TurboPlonk, 1000);
-    plonk_batch_verify_bench!(Bls12_381, Fr381, PlonkType::UltraPlonk, 1000);
-    plonk_batch_verify_bench!(Bls12_377, Fr377, PlonkType::UltraPlonk, 1000);
-    plonk_batch_verify_bench!(Bn254, Fr254, PlonkType::UltraPlonk, 1000);
-    plonk_batch_verify_bench!(BW6_761, Fr761, PlonkType::UltraPlonk, 1000);
+    // plonk_batch_verify_bench!(Bls12_377, Fr377, PlonkType::TurboPlonk, 1000);
+    // plonk_batch_verify_bench!(Bn254, Fr254, PlonkType::TurboPlonk, 1000);
+    // plonk_batch_verify_bench!(BW6_761, Fr761, PlonkType::TurboPlonk, 1000);
+    // plonk_batch_verify_bench!(Bls12_381, Fr381, PlonkType::UltraPlonk, 1000);
+    // plonk_batch_verify_bench!(Bls12_377, Fr377, PlonkType::UltraPlonk, 1000);
+    // plonk_batch_verify_bench!(Bn254, Fr254, PlonkType::UltraPlonk, 1000);
+    // plonk_batch_verify_bench!(BW6_761, Fr761, PlonkType::UltraPlonk, 1000);
 }
 
 fn main() {
     bench_prove();
-    bench_verify();
-    bench_batch_verify();
+    // bench_verify();
+    // bench_batch_verify();
 }

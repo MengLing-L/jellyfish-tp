@@ -140,6 +140,22 @@ pub trait Circuit<F: Field> {
 
     /// Constrain variable `c` to the addition of `a` and `b`.
     /// Return error if the input variables are invalid.
+    // fn turbo_gate(&mut self, a: Variable, b: Variable, c: Variable, d: Variable, o: Variable) -> Result<(), CircuitError>;
+
+    /// Obtain a variable representing an addition.
+    /// Return the index of the variable.
+    /// Return error if the input variables are invalid.
+    fn turbo(
+        &mut self,
+        wires: &[Variable; GATE_WIDTH],
+        q_lc: &[F; GATE_WIDTH],
+        q_mul: &[F; N_MUL_SELECTORS],
+        q_hash: &[F; GATE_WIDTH],
+        q_ecc: F,
+    ) -> Result<Variable, CircuitError>;
+
+    /// Constrain variable `c` to the addition of `a` and `b`.
+    /// Return error if the input variables are invalid.
     fn add_gate(&mut self, a: Variable, b: Variable, c: Variable) -> Result<(), CircuitError>;
 
     /// Obtain a variable representing an addition.
@@ -691,6 +707,54 @@ impl<F: FftField> Circuit<F> for PlonkCircuit<F> {
         let wire_vars = &[0, 0, 0, 0, var];
         self.insert_gate(wire_vars, Box::new(ConstantGate(constant)))?;
         Ok(())
+    }
+
+    // fn turbo_gate(&mut self, a: Variable, b: Variable, c: Variable, d: Variable, o: Variable) -> Result<(), CircuitError> {
+    //     self.check_var_bound(a)?;
+    //     self.check_var_bound(b)?;
+    //     self.check_var_bound(c)?;
+    //     self.check_var_bound(d)?;
+    //     self.check_var_bound(o)?;
+
+    //     let wire_vars = &[a, b, c, d, o];
+    //     self.insert_gate(wire_vars, Box::new(TurboGate))?;
+    //     Ok(())
+    // }
+
+    fn turbo(
+        &mut self,
+        wires: &[Variable; GATE_WIDTH],
+        q_lc: &[F; GATE_WIDTH],
+        q_mul: &[F; N_MUL_SELECTORS],
+        q_hash: &[F; GATE_WIDTH],
+        q_ecc: F,
+    ) -> Result<Variable, CircuitError> {
+        self.check_vars_bound(wires)?;
+        let output_val = q_lc[0] * self.witness(wires[0])?
+            + q_lc[1] * self.witness(wires[1])?
+            + q_lc[2] * self.witness(wires[2])?
+            + q_lc[3] * self.witness(wires[3])?
+            + q_mul[0] * self.witness(wires[0])? * self.witness(wires[1])?
+            + q_mul[1] * self.witness(wires[2])? * self.witness(wires[3])?
+            + q_hash[0] * self.witness(wires[0])?.pow([5])
+            + q_hash[1] * self.witness(wires[1])?.pow([5])
+            + q_hash[2] * self.witness(wires[2])?.pow([5])
+            + q_hash[3] * self.witness(wires[3])?.pow([5]);
+        let output_var = self.create_variable(output_val)?;
+        let wires = [wires[0], wires[1], wires[2], wires[3], output_var];
+
+        self.insert_gate(
+            &wires,
+            Box::new(TurboGate {
+                q_lc: *q_lc,
+                q_mul: *q_mul,
+                q_hash: *q_hash,
+                // q_ecc: q_ecc,
+                q_o: F::one(),
+            }),
+        )?;
+
+        Ok(output_var)
     }
 
     fn add_gate(&mut self, a: Variable, b: Variable, c: Variable) -> Result<(), CircuitError> {
